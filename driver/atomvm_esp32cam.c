@@ -35,6 +35,11 @@
 #define DEFAULT_JPEG_QUALITY 12
 #define INVALID_JPEG_QUALITY -1
 
+#define INVALID_MODEL        0
+#define MODEL_AI_THINKER_CAM 1
+#define MODEL_TTGO_TCAM05    2
+typedef int model_type_t;
+
 // AI-THINKER
 #define AI_THINKER_CAM_PIN_PWDN     32
 #define AI_THINKER_CAM_PIN_RESET    -1
@@ -54,6 +59,25 @@
 #define AI_THINKER_CAM_PIN_HREF     23
 #define AI_THINKER_CAM_PIN_PCLK     22
 
+// TTGO T-Camera w/ PIR 
+// source: https://github.com/lewisxhe/esp32-camera-series/blob/master/sketch/select_pins.h#L46
+#define TTGO_TCAM05_PIN_PWDN        26
+#define TTGO_TCAM05_PIN_RESET       -1
+#define TTGO_TCAM05_PIN_XCLK        32
+#define TTGO_TCAM05_PIN_SIOD        13
+#define TTGO_TCAM05_PIN_SIOC        12
+
+#define TTGO_TCAM05_PIN_D7          39
+#define TTGO_TCAM05_PIN_D6          36
+#define TTGO_TCAM05_PIN_D5          23
+#define TTGO_TCAM05_PIN_D4          18
+#define TTGO_TCAM05_PIN_D3          15
+#define TTGO_TCAM05_PIN_D2           4
+#define TTGO_TCAM05_PIN_D1          14
+#define TTGO_TCAM05_PIN_D0           5
+#define TTGO_TCAM05_PIN_VSYNC       27
+#define TTGO_TCAM05_PIN_HREF        25
+#define TTGO_TCAM05_PIN_PCLK        19
 
 static const char *const frame_size_a =       "\xA"  "frame_size";
 static const char *const jpeg_quality_a =     "\xC"  "jpeg_quality";
@@ -64,9 +88,12 @@ static const char *const svga_a =             "\x4"  "svga";
 static const char *const xga_a =              "\x3"  "xga";
 static const char *const sxga_a =             "\x4"  "sxga";
 static const char *const uxga_a =             "\x4"  "uxga";
-static const char *const flash_a =            "\x5"  "flash";
+// static const char *const flash_a =         "\x5"  "flash";
 static const char *const bad_state_a =        "\x9"  "bad_state";
 static const char *const capture_failed_a =   "\xE"  "capture_failed";
+static const char *const model_a =            "\x5"  "model";
+static const char *const aithinker_a =        "\x9"  "aithinker";
+static const char *const ttgo_tcam05_a =      "\x4"  "ttgo";
 //                                                    123456789ABCDEF
 
 uint8_t camera_initialized = 0;
@@ -112,36 +139,85 @@ static framesize_t get_jpeg_quality(term jpeg_quality)
     }
 }
 
-static camera_config_t *create_camera_config(framesize_t frame_size, int jpeg_quality)
+
+static model_type_t get_model_type(Context* ctx, term model) 
+{
+		if (term_is_nil(model)) {
+				return MODEL_AI_THINKER_CAM;
+		} else {
+				if (model == context_make_atom(ctx, aithinker_a)) {
+					return MODEL_AI_THINKER_CAM;
+				}
+				else if (model == context_make_atom(ctx, ttgo_tcam05_a)) {
+					return MODEL_TTGO_TCAM05;
+				}
+				else {
+					return INVALID_MODEL;
+				}
+		}
+}
+
+
+static camera_config_t *create_camera_config(framesize_t frame_size, int jpeg_quality, model_type_t model_type)
 {
     camera_config_t *config = malloc(sizeof(camera_config_t));
     if (IS_NULL_PTR(config)) {
         ESP_LOGE(TAG, "Memory allocation failed");
         return NULL;
     }
-    config->pin_pwdn  = AI_THINKER_CAM_PIN_PWDN;
-    config->pin_reset = AI_THINKER_CAM_PIN_RESET;
-    config->pin_xclk = AI_THINKER_CAM_PIN_XCLK;
-    config->pin_sscb_sda = AI_THINKER_CAM_PIN_SIOD;
-    config->pin_sscb_scl = AI_THINKER_CAM_PIN_SIOC;
-    config->pin_d7 = AI_THINKER_CAM_PIN_D7;
-    config->pin_d6 = AI_THINKER_CAM_PIN_D6;
-    config->pin_d5 = AI_THINKER_CAM_PIN_D5;
-    config->pin_d4 = AI_THINKER_CAM_PIN_D4;
-    config->pin_d3 = AI_THINKER_CAM_PIN_D3;
-    config->pin_d2 = AI_THINKER_CAM_PIN_D2;
-    config->pin_d1 = AI_THINKER_CAM_PIN_D1;
-    config->pin_d0 = AI_THINKER_CAM_PIN_D0;
-    config->pin_vsync = AI_THINKER_CAM_PIN_VSYNC;
-    config->pin_href = AI_THINKER_CAM_PIN_HREF;
-    config->pin_pclk = AI_THINKER_CAM_PIN_PCLK;
-    config->xclk_freq_hz = 20000000;
-    config->ledc_timer = LEDC_TIMER_0;
-    config->ledc_channel = LEDC_CHANNEL_0;
-    config->pixel_format = PIXFORMAT_JPEG;
-    config->frame_size = frame_size;
-    config->jpeg_quality = jpeg_quality;
-    config->fb_count = 1;
+
+		if (model_type == MODEL_AI_THINKER_CAM) {
+      ESP_LOGE(TAG, "Using AI-Thinker..");
+			config->pin_pwdn  = AI_THINKER_CAM_PIN_PWDN;
+			config->pin_reset = AI_THINKER_CAM_PIN_RESET;
+			config->pin_xclk = AI_THINKER_CAM_PIN_XCLK;
+			config->pin_sscb_sda = AI_THINKER_CAM_PIN_SIOD;
+			config->pin_sscb_scl = AI_THINKER_CAM_PIN_SIOC;
+			config->pin_d7 = AI_THINKER_CAM_PIN_D7;
+			config->pin_d6 = AI_THINKER_CAM_PIN_D6;
+			config->pin_d5 = AI_THINKER_CAM_PIN_D5;
+			config->pin_d4 = AI_THINKER_CAM_PIN_D4;
+			config->pin_d3 = AI_THINKER_CAM_PIN_D3;
+			config->pin_d2 = AI_THINKER_CAM_PIN_D2;
+			config->pin_d1 = AI_THINKER_CAM_PIN_D1;
+			config->pin_d0 = AI_THINKER_CAM_PIN_D0;
+			config->pin_vsync = AI_THINKER_CAM_PIN_VSYNC;
+			config->pin_href = AI_THINKER_CAM_PIN_HREF;
+			config->pin_pclk = AI_THINKER_CAM_PIN_PCLK;
+			config->xclk_freq_hz = 20000000;
+			config->ledc_timer = LEDC_TIMER_0;
+			config->ledc_channel = LEDC_CHANNEL_0;
+			config->pixel_format = PIXFORMAT_JPEG;
+			config->frame_size = frame_size;
+			config->jpeg_quality = jpeg_quality;
+			config->fb_count = 1;
+		} else if (model_type == MODEL_TTGO_TCAM05) {
+      ESP_LOGE(TAG, "Using TTGo TCam05..");
+			config->pin_pwdn  = TTGO_TCAM05_PIN_PWDN;
+			config->pin_reset = TTGO_TCAM05_PIN_RESET;
+			config->pin_xclk = TTGO_TCAM05_PIN_XCLK;
+			config->pin_sscb_sda = TTGO_TCAM05_PIN_SIOD;
+			config->pin_sscb_scl = TTGO_TCAM05_PIN_SIOC;
+			config->pin_d7 = TTGO_TCAM05_PIN_D7;
+			config->pin_d6 = TTGO_TCAM05_PIN_D6;
+			config->pin_d5 = TTGO_TCAM05_PIN_D5;
+			config->pin_d4 = TTGO_TCAM05_PIN_D4;
+			config->pin_d3 = TTGO_TCAM05_PIN_D3;
+			config->pin_d2 = TTGO_TCAM05_PIN_D2;
+			config->pin_d1 = TTGO_TCAM05_PIN_D1;
+			config->pin_d0 = TTGO_TCAM05_PIN_D0;
+			config->pin_vsync = TTGO_TCAM05_PIN_VSYNC;
+			config->pin_href = TTGO_TCAM05_PIN_HREF;
+			config->pin_pclk = TTGO_TCAM05_PIN_PCLK;
+			config->xclk_freq_hz = 20000000;
+			config->ledc_timer = LEDC_TIMER_0;
+			config->ledc_channel = LEDC_CHANNEL_0;
+			config->pixel_format = PIXFORMAT_JPEG;
+			config->frame_size = frame_size;
+			config->jpeg_quality = jpeg_quality;
+			config->fb_count = 1;
+
+		}
 
     return config;
 }
@@ -166,7 +242,12 @@ static term nif_esp32cam_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    camera_config_t *camera_config = create_camera_config(frame_size, jpeg_quality);
+		model_type_t model_type = get_model_type(ctx, interop_proplist_get_value(config, context_make_atom(ctx, model_a)));
+		if (model_type == INVALID_MODEL) {
+				RAISE_ERROR(BADARG_ATOM);
+		}
+
+    camera_config_t *camera_config = create_camera_config(frame_size, jpeg_quality, model_type);
     if (IS_NULL_PTR(camera_config)) {
         RAISE_ERROR(MEMORY_ATOM);
     }
@@ -200,7 +281,7 @@ static term nif_esp32cam_capture(Context *ctx, int argc, term argv[])
         RAISE_ERROR(context_make_atom(ctx, bad_state_a));
     }
 
-    uint8_t use_flash = 0;
+    // uint8_t use_flash = 0;
 
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) {
